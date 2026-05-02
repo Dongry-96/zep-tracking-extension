@@ -3,6 +3,7 @@ const STATUS_CACHE_KEY = "lastStatus";
 
 const state = {
   scriptUrl: "",
+  sheetUrl: "",
   pollSeconds: DEFAULT_POLL_SECONDS,
   status: null,
   logs: [],
@@ -25,19 +26,31 @@ const els = {
   peopleListTitle: document.querySelector("#peopleListTitle"),
   peopleList: document.querySelector("#peopleList"),
   recentEventsList: document.querySelector("#recentEventsList"),
+  settingsBackdrop: document.querySelector("#settingsBackdrop"),
+  settingsPanel: document.querySelector("#settingsPanel"),
+  closeSettings: document.querySelector("#closeSettings"),
+  inlineScriptUrl: document.querySelector("#inlineScriptUrl"),
+  inlineSheetUrl: document.querySelector("#inlineSheetUrl"),
+  inlinePollSeconds: document.querySelector("#inlinePollSeconds"),
+  saveInlineSettings: document.querySelector("#saveInlineSettings"),
+  openInlineSheet: document.querySelector("#openInlineSheet"),
+  inlineSettingsMessage: document.querySelector("#inlineSettingsMessage"),
 };
 
 document.addEventListener("DOMContentLoaded", init);
 
 async function init() {
-  const settings = await chrome.storage.local.get(["scriptUrl", "pollSeconds", STATUS_CACHE_KEY]);
+  const settings = await chrome.storage.local.get(["scriptUrl", "sheetUrl", "pollSeconds", STATUS_CACHE_KEY]);
   state.scriptUrl = settings.scriptUrl || "";
+  state.sheetUrl = settings.sheetUrl || "";
   state.pollSeconds = Number(settings.pollSeconds || DEFAULT_POLL_SECONDS);
+  syncSettingsForm();
 
   bindEvents();
 
   if (!state.scriptUrl) {
     showMessage("설정에서 Worker URL을 저장해주세요.", true);
+    openSettingsPanel();
     return;
   }
 
@@ -51,7 +64,11 @@ async function init() {
 }
 
 function bindEvents() {
-  els.openSettings.addEventListener("click", () => chrome.runtime.openOptionsPage());
+  els.openSettings.addEventListener("click", openSettingsPanel);
+  els.closeSettings.addEventListener("click", closeSettingsPanel);
+  els.settingsBackdrop.addEventListener("click", closeSettingsPanel);
+  els.saveInlineSettings.addEventListener("click", saveInlineSettings);
+  els.openInlineSheet.addEventListener("click", openInlineSheet);
 
   document.querySelectorAll(".tab").forEach(button => {
     button.addEventListener("click", () => activateTab(button.dataset.tab));
@@ -115,6 +132,74 @@ async function refreshStatus() {
   } catch (err) {
     showMessage(err.message, true);
   }
+}
+
+function syncSettingsForm() {
+  els.inlineScriptUrl.value = state.scriptUrl;
+  els.inlineSheetUrl.value = state.sheetUrl;
+  els.inlinePollSeconds.value = state.pollSeconds || DEFAULT_POLL_SECONDS;
+}
+
+function openSettingsPanel() {
+  syncSettingsForm();
+  setInlineSettingsMessage("", false);
+  els.settingsBackdrop.hidden = false;
+  els.settingsPanel.hidden = false;
+  requestAnimationFrame(() => {
+    els.settingsBackdrop.classList.add("open");
+    els.settingsPanel.classList.add("open");
+    els.inlineScriptUrl.focus();
+  });
+}
+
+function closeSettingsPanel() {
+  els.settingsBackdrop.classList.remove("open");
+  els.settingsPanel.classList.remove("open");
+  setTimeout(() => {
+    els.settingsBackdrop.hidden = true;
+    els.settingsPanel.hidden = true;
+  }, 160);
+}
+
+async function saveInlineSettings() {
+  const scriptUrl = els.inlineScriptUrl.value.trim();
+  const sheetUrl = els.inlineSheetUrl.value.trim();
+  const pollSeconds = Math.max(3, Number(els.inlinePollSeconds.value || DEFAULT_POLL_SECONDS));
+
+  if (!scriptUrl) {
+    setInlineSettingsMessage("Worker URL을 입력해주세요.", true);
+    return;
+  }
+
+  state.scriptUrl = scriptUrl;
+  state.sheetUrl = sheetUrl;
+  state.pollSeconds = pollSeconds;
+  await chrome.storage.local.set({ scriptUrl, sheetUrl, pollSeconds });
+  setInlineSettingsMessage("저장했습니다.", false);
+  clearMessage();
+  startPolling();
+  refreshStatus();
+}
+
+function openInlineSheet() {
+  const sheetUrl = els.inlineSheetUrl.value.trim();
+  if (!sheetUrl) {
+    setInlineSettingsMessage("Google Sheet URL을 입력해주세요.", true);
+    return;
+  }
+
+  try {
+    const url = new URL(sheetUrl);
+    if (url.protocol !== "https:") throw new Error("invalid");
+    window.open(url.toString(), "_blank", "noopener");
+  } catch (err) {
+    setInlineSettingsMessage("올바른 Google Sheet URL을 입력해주세요.", true);
+  }
+}
+
+function setInlineSettingsMessage(message, isError) {
+  els.inlineSettingsMessage.textContent = message;
+  els.inlineSettingsMessage.classList.toggle("error", Boolean(isError));
 }
 
 async function loadLogs(options = {}) {
@@ -195,17 +280,23 @@ function renderPeople(container, people, emptyText) {
 
   people.forEach(person => {
     const item = document.createElement("article");
+    const status = personStatus(person);
     item.className = "person-row";
     item.innerHTML = `
       <div>
         <strong></strong>
         <span></span>
       </div>
-      <small></small>
+      <div class="person-meta">
+        <span class="status-pill"></span>
+        <small class="event-time"></small>
+      </div>
     `;
     item.querySelector("strong").textContent = person.realName || person.nickname || person.userId;
     item.querySelector("span").textContent = person.nickname ? `${person.nickname} · ${person.userId}` : person.userId || "";
-    item.querySelector("small").textContent = lastEventText(person);
+    item.querySelector(".status-pill").textContent = status.label;
+    item.querySelector(".status-pill").classList.toggle("online", status.isOnline);
+    item.querySelector(".event-time").textContent = status.time || "-";
     container.appendChild(item);
   });
 }
@@ -285,11 +376,28 @@ function empty(text) {
   return element;
 }
 
-function lastEventText(person) {
-  if (person.status === "Online" && person.lastEnterAt) return `접속 ${formatDate(person.lastEnterAt)}`;
-  if (person.status === "Offline" && person.lastExitAt) return `퇴실 ${formatDate(person.lastExitAt)}`;
-  if (person.lastEventAt) return `이벤트 ${formatDate(person.lastEventAt)}`;
-  return "";
+function personStatus(person) {
+  if (person.status === "Online") {
+    return {
+      label: "접속중",
+      time: formatDate(person.lastEnterAt || person.lastEventAt),
+      isOnline: true,
+    };
+  }
+
+  if (person.status === "Offline") {
+    return {
+      label: "퇴실",
+      time: formatDate(person.lastExitAt || person.lastEventAt),
+      isOnline: false,
+    };
+  }
+
+  return {
+    label: person.status === "NoStatus" ? "상태 없음" : "미확인",
+    time: formatDate(person.lastEventAt),
+    isOnline: false,
+  };
 }
 
 function formatDate(value) {

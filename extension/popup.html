@@ -7,37 +7,34 @@
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
-    <main class="popup">
+    <main class="popup app-shell">
       <header class="topbar">
         <div>
-          <h1>ZEP Tracking <span class="version-label">v1.0</span></h1>
+          <h1>ZEP Tracking <span class="version-label">v1.1</span></h1>
           <p id="lastUpdated">대기 중</p>
         </div>
-        <button id="openSettings" class="secondary" type="button">설정</button>
+        <button id="openSettings" class="icon-button" type="button" aria-label="설정">
+          <span aria-hidden="true">설정</span>
+        </button>
       </header>
 
       <div id="mainView">
-        <nav class="tabs" aria-label="화면 전환">
-          <button class="tab active" type="button" data-tab="dashboard">현황</button>
-          <button class="tab" type="button" data-tab="logs">로그</button>
-        </nav>
-
         <p id="message" class="banner" hidden></p>
 
         <section id="dashboardTab" class="tab-panel active">
           <div class="stats">
             <button id="offlineFilter" class="stat-card active" type="button" data-status="offline">
-              <strong id="offlineCount">0</strong>
               <span>미접속</span>
+              <strong><span id="offlineCount">0</span><small>명</small></strong>
             </button>
             <button id="onlineFilter" class="stat-card" type="button" data-status="online">
-              <strong id="onlineCount">0</strong>
               <span>접속중</span>
+              <strong><span id="onlineCount">0</span><small>명</small></strong>
             </button>
           </div>
 
           <label class="search-field" for="peopleSearch">
-            <span>인원 검색</span>
+            <span aria-hidden="true" class="search-icon"></span>
             <input id="peopleSearch" type="search" placeholder="이름, 닉네임, ID 검색">
           </label>
 
@@ -49,7 +46,7 @@
 
         <section id="logsTab" class="tab-panel">
           <label class="search-field" for="logSearch">
-            <span>로그 검색</span>
+            <span aria-hidden="true" class="search-icon"></span>
             <input id="logSearch" type="search" placeholder="이름, 닉네임, ID 검색">
           </label>
 
@@ -58,7 +55,52 @@
             <div id="recentEventsList" class="list"></div>
           </section>
         </section>
+
+        <nav class="tabs" aria-label="화면 전환">
+          <button class="tab active" type="button" data-tab="dashboard">
+            <span>Status</span>
+          </button>
+          <button class="tab" type="button" data-tab="logs">
+            <span>Log</span>
+          </button>
+        </nav>
       </div>
+
+      <div id="settingsBackdrop" class="settings-backdrop" hidden></div>
+      <aside id="settingsPanel" class="settings-panel" aria-label="설정" hidden>
+        <header class="settings-header">
+          <div>
+            <h2>설정</h2>
+            <p>트랙 공용 URL을 저장합니다.</p>
+          </div>
+          <button id="closeSettings" class="icon-button" type="button" aria-label="설정 닫기">닫기</button>
+        </header>
+
+        <div class="settings-content">
+          <label class="field">
+            <span>Worker URL</span>
+            <input id="inlineScriptUrl" type="url" placeholder="https://zep-tracking.your-name.workers.dev">
+          </label>
+
+          <label class="field sheet-field">
+            <span>Google Sheet URL</span>
+            <div class="input-action">
+              <input id="inlineSheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/...">
+              <button id="openInlineSheet" class="secondary" type="button">열기</button>
+            </div>
+          </label>
+
+          <label class="field compact-field">
+            <span>조회 주기(초)</span>
+            <input id="inlinePollSeconds" type="number" min="3" max="60" step="1">
+          </label>
+
+          <div class="actions">
+            <button id="saveInlineSettings" type="button">저장</button>
+            <span id="inlineSettingsMessage" class="status-message" role="status"></span>
+          </div>
+        </div>
+      </aside>
 
     </main>
 
