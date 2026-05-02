@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZEP Tracking 설정</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body class="options-page">
+    <main class="shell">
+      <header class="page-header">
+        <h1>ZEP Tracking 설정 <span class="version-label">v1.0</span></h1>
+      </header>
+
+      <section class="panel">
+        <label class="field">
+          <span>Worker URL</span>
+          <input id="scriptUrl" type="url" placeholder="https://zep-tracking.your-name.workers.dev">
+        </label>
+
+        <label class="field sheet-field">
+          <span>Google Sheet URL</span>
+          <div class="input-action">
+            <input id="sheetUrl" type="url" placeholder="https://docs.google.com/spreadsheets/d/...">
+            <button id="openSheetButton" class="secondary" type="button">열기</button>
+          </div>
+        </label>
+
+        <label class="field compact-field">
+          <span>조회 주기(초)</span>
+          <input id="pollSeconds" type="number" min="3" max="60" step="1">
+        </label>
+
+        <div class="actions">
+          <button id="saveButton" type="button">저장</button>
+          <span id="statusMessage" class="status-message" role="status"></span>
+        </div>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

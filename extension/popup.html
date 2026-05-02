@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>ZEP Tracking</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="popup">
+      <header class="topbar">
+        <div>
+          <h1>ZEP Tracking <span class="version-label">v1.0</span></h1>
+          <p id="lastUpdated">대기 중</p>
+        </div>
+        <button id="openSettings" class="secondary" type="button">설정</button>
+      </header>
+
+      <div id="mainView">
+        <nav class="tabs" aria-label="화면 전환">
+          <button class="tab active" type="button" data-tab="dashboard">현황</button>
+          <button class="tab" type="button" data-tab="logs">로그</button>
+        </nav>
+
+        <p id="message" class="banner" hidden></p>
+
+        <section id="dashboardTab" class="tab-panel active">
+          <div class="stats">
+            <button id="offlineFilter" class="stat-card active" type="button" data-status="offline">
+              <strong id="offlineCount">0</strong>
+              <span>미접속</span>
+            </button>
+            <button id="onlineFilter" class="stat-card" type="button" data-status="online">
+              <strong id="onlineCount">0</strong>
+              <span>접속중</span>
+            </button>
+          </div>
+
+          <label class="search-field" for="peopleSearch">
+            <span>인원 검색</span>
+            <input id="peopleSearch" type="search" placeholder="이름, 닉네임, ID 검색">
+          </label>
+
+          <section class="list-block">
+            <h2 id="peopleListTitle">미접속자</h2>
+            <div id="peopleList" class="list"></div>
+          </section>
+        </section>
+
+        <section id="logsTab" class="tab-panel">
+          <label class="search-field" for="logSearch">
+            <span>로그 검색</span>
+            <input id="logSearch" type="search" placeholder="이름, 닉네임, ID 검색">
+          </label>
+
+          <section class="list-block">
+            <h2>최근 접속 로그</h2>
+            <div id="recentEventsList" class="list"></div>
+          </section>
+        </section>
+      </div>
+
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

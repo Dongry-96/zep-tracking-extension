@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "ZEP Tracking",
+  "description": "Track ZEP student presence with Google Apps Script and Google Sheets.",
+  "version": "1.0.0",
+  "icons": {
+    "16": "icons/zep-16.png",
+    "32": "icons/zep-32.png",
+    "48": "icons/zep-48.png",
+    "128": "icons/zep-128.png"
+  },
+  "action": {
+    "default_title": "ZEP Tracking",
+    "default_icon": {
+      "16": "icons/zep-16.png",
+      "32": "icons/zep-32.png",
+      "48": "icons/zep-48.png",
+      "128": "icons/zep-128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "options_page": "options.html",
+  "permissions": [
+    "sidePanel",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://*.workers.dev/*"
+  ]
+}
