@@ -44,3 +44,8 @@ desktop.ini
 
 # Codex/local workspace metadata
 .codex/
+
+# bkit / Claude Code local state
+.bkit/
+.claude/
+CLAUDE.md

@@ -5,7 +5,7 @@ const SHEETS = {
   },
   mappings: {
     name: "Mappings",
-    headers: ["realName", "userId", "nickname"],
+    headers: ["realName", "isStaff", "userId", "nickname"],
   },
   events: {
     name: "Events",
@@ -18,13 +18,13 @@ const SHEETS = {
 };
 
 const CACHE_KEYS = {
-  status: "status:v2",
-  logs: "logs:v2",
+  status: "status:v3",
+  logs: "logs:v3",
 };
 const CACHE_TTL_SECONDS = 3;
 const LOG_DAYS = 7;
 const EVENT_TAIL_ROWS = 1000;
-const SHEETS_READY_KEY = "sheetsReady";
+const SHEETS_READY_KEY = "sheetsReady:v3";
 
 function doGet(e) {
   try {
@@ -112,13 +112,14 @@ function ensureMappingPlaceholder_(userId, nickname) {
   const idx = rows.findIndex(row => row.userId === userId);
 
   if (idx === -1) {
-    sheet.appendRow(["", userId, nickname]);
+    setMappingRow_(sheet, getNextMappingRow_(sheet), ["", false, userId, nickname]);
+    applyMappingStaffCheckboxes_(sheet);
     return;
   }
 
   const row = rows[idx];
   if (nickname && row.nickname !== nickname) {
-    sheet.getRange(idx + 2, 3).setValue(nickname);
+    sheet.getRange(idx + 2, getMappingColumn_("nickname")).setValue(nickname);
   }
 }
 
@@ -160,18 +161,20 @@ function upsertPresence_(userId, nickname, status, eventAt) {
 function getStatus_() {
   const presence = getPresence_();
   const mappings = getMappings_();
-  const completedMappings = mappings.filter(row => row.realName && row.userId);
+  const visibleMappings = mappings.filter(row => !isStaffMapping_(row));
+  const completedMappings = visibleMappings.filter(row => row.realName && row.userId);
   const needsMapping = mappings
-    .filter(row => !row.realName && row.userId)
+    .filter(row => !isStaffMapping_(row) && !row.realName && row.userId)
     .map(row => ({
       realName: "",
       userId: row.userId,
       nickname: row.nickname,
       status: "NeedsMapping",
     }));
-  const realNameByNickname = getRealNameByNickname_(mappings);
+  const realNameByNickname = getRealNameByNickname_(visibleMappings);
   const mappedByUserId = new Map(completedMappings.map(mapping => [mapping.userId, mapping]));
-  const knownUserIds = new Set(mappings.filter(mapping => mapping.userId).map(mapping => mapping.userId));
+  const knownUserIds = new Set(visibleMappings.filter(mapping => mapping.userId).map(mapping => mapping.userId));
+  const staffUserIds = new Set(mappings.filter(mapping => isStaffMapping_(mapping) && mapping.userId).map(mapping => mapping.userId));
   const presenceByUserId = new Map(presence.map(item => [item.userId, item]));
 
   const online = [];
@@ -205,7 +208,7 @@ function getStatus_() {
   });
 
   const unmatched = presence
-    .filter(item => !knownUserIds.has(item.userId))
+    .filter(item => !knownUserIds.has(item.userId) && !staffUserIds.has(item.userId))
     .map(item => ({
       userId: item.userId,
       nickname: item.nickname || "unknown",
@@ -237,18 +240,22 @@ function getStatus_() {
 
 function getLogs_() {
   const mappings = getMappings_();
-  const completedMappings = mappings.filter(row => row.realName && row.userId);
+  const visibleMappings = mappings.filter(row => !isStaffMapping_(row));
+  const staffUserIds = new Set(mappings.filter(row => isStaffMapping_(row) && row.userId).map(row => row.userId));
+  const completedMappings = visibleMappings.filter(row => row.realName && row.userId);
   const mappedByUserId = new Map(completedMappings.map(mapping => [mapping.userId, mapping]));
-  const realNameByNickname = getRealNameByNickname_(mappings);
-  const recentEvents = getRecentEventsForDays_(LOG_DAYS).map(event => {
-    const mapping = mappedByUserId.get(event.userId);
-    const nickname = String(event.nickname || "").trim();
-    const realName = mapping ? mapping.realName : realNameByNickname.get(nickname) || "";
-    return {
-      ...event,
-      realName,
-    };
-  });
+  const realNameByNickname = getRealNameByNickname_(visibleMappings);
+  const recentEvents = getRecentEventsForDays_(LOG_DAYS)
+    .filter(event => !staffUserIds.has(event.userId))
+    .map(event => {
+      const mapping = mappedByUserId.get(event.userId);
+      const nickname = String(event.nickname || "").trim();
+      const realName = mapping ? mapping.realName : realNameByNickname.get(nickname) || "";
+      return {
+        ...event,
+        realName,
+      };
+    });
 
   return {
     ok: true,
@@ -281,6 +288,12 @@ function normalizePresenceRow_(row) {
 
 function getMappings_() {
   return getRows_(getSheet_(SHEETS.mappings.name));
+}
+
+function isStaffMapping_(row) {
+  const value = row.isStaff;
+  if (value === true) return true;
+  return String(value || "").trim().toLowerCase() === "true";
 }
 
 function getRealNameByNickname_(mappings) {
@@ -398,8 +411,61 @@ function ensureSheets_() {
       sheet.getRange(1, 1, 1, config.headers.length).setValues([config.headers]);
       sheet.setFrozenRows(1);
     }
+
+    if (key === "mappings") {
+      applyMappingStaffCheckboxes_(sheet);
+    }
   });
 
+  backfillMappingsFromPresence_();
+}
+
+function applyMappingStaffCheckboxes_(sheet) {
+  const column = getMappingColumn_("isStaff");
+  if (column < 1) return;
+
+  const maxRows = Math.max(sheet.getMaxRows() - 1, 1);
+  sheet.getRange(2, column, maxRows, 1).insertCheckboxes();
+}
+
+function getMappingColumn_(header) {
+  return SHEETS.mappings.headers.indexOf(header) + 1;
+}
+
+function backfillMappingsFromPresence_() {
+  const sheet = getSheet_(SHEETS.mappings.name);
+  const mappings = getMappings_();
+  const knownUserIds = new Set(mappings.filter(row => row.userId).map(row => row.userId));
+  const rowsToAppend = getPresence_()
+    .filter(row => row.userId && !knownUserIds.has(row.userId))
+    .map(row => ["", false, row.userId, row.nickname || ""]);
+
+  if (rowsToAppend.length === 0) return;
+
+  const startRow = getNextMappingRow_(sheet);
+  sheet.getRange(startRow, 1, rowsToAppend.length, SHEETS.mappings.headers.length).setValues(rowsToAppend);
+  applyMappingStaffCheckboxes_(sheet);
+}
+
+function setMappingRow_(sheet, rowNumber, values) {
+  sheet.getRange(rowNumber, 1, 1, SHEETS.mappings.headers.length).setValues([values]);
+}
+
+function getNextMappingRow_(sheet) {
+  const lastRow = Math.max(sheet.getLastRow(), 2);
+  const values = sheet.getRange(2, 1, lastRow - 1, SHEETS.mappings.headers.length).getValues();
+  const headers = SHEETS.mappings.headers;
+  const realNameIndex = headers.indexOf("realName");
+  const userIdIndex = headers.indexOf("userId");
+  const nicknameIndex = headers.indexOf("nickname");
+
+  const emptyIndex = values.findIndex(row => (
+    !row[realNameIndex] &&
+    !row[userIdIndex] &&
+    !row[nicknameIndex]
+  ));
+
+  return emptyIndex === -1 ? lastRow + 1 : emptyIndex + 2;
 }
 
 function isPresenceStatus_(value) {
