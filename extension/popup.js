@@ -8,6 +8,7 @@ const state = {
   status: null,
   logs: [],
   logsLoaded: false,
+  logsRendered: false,
   logsLoading: false,
   timer: null,
   selectedStatus: "offline",
@@ -103,6 +104,14 @@ function activateTab(name) {
   });
 
   if (name === "logs") {
+    if (state.logsLoaded) {
+      if (!state.logsRendered) {
+        renderRecentEvents(state.logs);
+      }
+      loadLogs({ silent: true });
+      return;
+    }
+
     loadLogs();
   }
 }
@@ -127,7 +136,7 @@ async function refreshStatus() {
     await chrome.storage.local.set({ [STATUS_CACHE_KEY]: data });
     renderStatus(data);
     if (!state.logsLoaded || isLogsTabActive()) {
-      loadLogs({ silent: true });
+      loadLogs({ silent: true, renderWhenHidden: true });
     }
   } catch (err) {
     showMessage(err.message, true);
@@ -216,7 +225,8 @@ async function loadLogs(options = {}) {
     if (!data.ok) throw new Error(data.error || "로그 조회 실패");
     state.logs = data.recentEvents || [];
     state.logsLoaded = true;
-    if (isLogsTabActive()) {
+    state.logsRendered = false;
+    if (isLogsTabActive() || options.renderWhenHidden) {
       renderRecentEvents(state.logs);
     }
   } catch (err) {
@@ -303,6 +313,7 @@ function renderPeople(container, people, emptyText) {
 
 function renderRecentEvents(events) {
   els.recentEventsList.replaceChildren();
+  state.logsRendered = true;
 
   if (state.logSearch) {
     renderGroupedLogEvents(events);
