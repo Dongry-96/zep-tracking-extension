@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "ZEP Tracking",
   "description": "Track ZEP student presence with Google Apps Script and Google Sheets.",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "icons": {
     "16": "icons/zep-16.png",
     "32": "icons/zep-32.png",
