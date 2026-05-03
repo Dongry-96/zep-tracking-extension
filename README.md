@@ -2,24 +2,41 @@
 
 ZEP 입실/퇴실 기록을 Google Sheet에 저장하고, 같은 트랙의 매니저들이 Chrome 확장 프로그램 사이드패널에서 현재 접속중/미접속 인원과 최근 로그를 함께 보는 도구입니다.
 
+확장 프로그램에는 크게 기능이 2개 있으며, 각 기능은 하단 `Status` / `Logs` 버튼을 통해 전환됩니다.
+
+## 주요 기능
+
+### Status (현황)
+
+- `미접속` 버튼을 누르면 미접속자 목록이 보입니다.
+- `접속중` 버튼을 누르면 접속중인 사람 목록이 보입니다.
+- 각 인원 카드에는 접속중/퇴실 상태 뱃지와 마지막 이벤트 시간이 표시됩니다.
+- 검색창에 이름, 닉네임, ID를 입력하면 해당 사람만 찾을 수 있습니다.
+
+### Logs (로그)
+
+- 기본으로 최근 로그가 보입니다.
+- 이름을 검색하면 최근 일주일 기록을 날짜별로 묶어서 볼 수 있습니다.
+- 같은 날짜의 입실/퇴실이 한 묶음으로 표시됩니다.
+
 ## 전체 구조
 
-아래 그림처럼 ZEP에서 누군가 입실하거나 퇴실하면 신호가 자동으로 전달되고 저장됩니다. 매니저는 Chrome 확장 프로그램만 열면 실시간으로 현황을 볼 수 있습니다.
+ZEP에서 누군가 입실하거나 퇴실하면 신호가 자동으로 전달되고 저장됩니다. 매니저는 Chrome 확장 프로그램만 열면 실시간으로 현황을 볼 수 있습니다.
 
 ```mermaid
 flowchart LR
-    ZEP["🎮 ZEP\n입실 · 퇴실 감지"]
-    Worker["☁️ Cloudflare Worker\n중간 전달자"]
-    GAS["⚙️ Google Apps Script\n기록 & 조회"]
-    Sheet["📊 Google Sheet\n데이터 저장소"]
-    Ext["🔍 Chrome 확장 프로그램\n매니저 화면"]
+    ZEP["ZEP<br>입실 / 퇴실 감지"]
+    Worker["Cloudflare Worker<br>중간 전달자"]
+    GAS["Apps Script<br>기록 & 조회"]
+    Sheet["Google Sheet<br>데이터 저장소"]
+    Ext["Chrome 확장 프로그램<br>매니저 화면"]
 
-    ZEP -->|"① 입퇴실 신호"| Worker
-    Worker -->|"② 전달"| GAS
-    GAS <-->|"③ 저장 / 읽기"| Sheet
-    Ext -->|"④ 현황 요청"| Worker
-    Worker <-->|"⑤"| GAS
-    Worker -->|"⑥ 현황 응답"| Ext
+    ZEP -->|"1. 입퇴실 신호"| Worker
+    Worker -->|"2. 전달"| GAS
+    GAS -->|"3. 저장"| Sheet
+    Sheet -->|"4. 저장된 데이터 읽기"| GAS
+    GAS -->|"5. 결과 전달"| Worker
+    Worker -->|"6. 화면에 표시"| Ext
 ```
 
 중요한 운영 원칙은 아래와 같습니다.
@@ -37,7 +54,7 @@ flowchart LR
 | `cloudflare-worker/worker.js` | ZEP과 Apps Script 사이를 연결하는 필수 중간 코드 |
 | `extension/` | Chrome에 설치하는 확장 프로그램 |
 
-확장 프로그램 설정에는 URL을 2개 넣습니다.
+크롬 확장 프로그램 설정에는 URL을 2개 넣습니다.
 
 | 설정 이름 | 의미 |
 | --- | --- |
@@ -53,23 +70,24 @@ flowchart LR
 - ZEP 관리자 권한
 - Cloudflare 계정
 
-대표 매니저와 다른 매니저의 역할은 다릅니다.
+트랙의 대표 매니저와 다른 매니저의 역할은 다릅니다.
 
 | 역할 | 해야 할 일 |
 | --- | --- |
 | 대표 매니저 | 템플릿 시트 사본 만들기, Apps Script 배포, Cloudflare Worker 배포, ZEP API 연결 |
 | 다른 매니저 | Chrome 확장 프로그램 설치, 공유받은 Worker URL과 Google Sheet URL 입력 |
 
-## 대표 매니저 1단계: Google Sheet 사본 만들기
+<details>
+<summary>1. Google Sheet 사본 만들기</summary>
 
 아래 링크에서 템플릿 시트를 사본으로 복사합니다. 시트 구조(탭, 컬럼명)가 미리 준비되어 있어서 직접 만들 필요가 없습니다.
 
 ➡️ **[ZEP Tracking 템플릿 시트 사본 만들기](https://docs.google.com/spreadsheets/d/1N-wFpOGlallKm3cfhTjKB6Mci8olek_v5rpeaHMlk_8/copy)**
 
 1. 위 링크를 클릭합니다.
-2. `사본 만들기` 창이 열리면 이름을 알아보기 쉽게 바꿉니다.
+2. `사본 만들기`를 누릅니다.
+3. 창이 열리면 이름을 알아보기 쉽게 바꿉니다.
    - 예: `ZEP 출석 관리 - [트랙명]`
-3. `사본 만들기`를 누릅니다.
 4. 복사된 시트가 열리면 브라우저 주소창의 Google Sheet URL을 복사해둡니다.
 
 시트 구조는 아래와 같이 미리 구성되어 있습니다.
@@ -81,11 +99,14 @@ flowchart LR
 | `Events` | `receivedAt`, `zepDate`, `eventType`, `userId`, `nickname`, `mapHashId`, `rawJson` | 입실/퇴실 로그를 저장하는 곳 |
 | `Diagnostics` | `receivedAt`, `stage`, `message`, `rawBody` | 오류나 진단 기록을 저장하는 곳 |
 
-## 대표 매니저 2단계: Apps Script 배포하기
+`Mappings` 시트의 `realName`, `isStaff` 컬럼을 제외하고는 직접 수정하지 않는 것을 권장합니다.
+
+</details>
+
+<details>
+<summary>2. Apps Script 배포하기</summary>
 
 사본에는 Apps Script 코드가 이미 포함되어 있습니다. 코드를 따로 붙여넣을 필요 없이 바로 배포하면 됩니다.
-
-> `/copy` 링크에서 **Apps Script 파일 보기** 버튼이 함께 보이는 경우, 무시하고 **사본 만들기**만 누르면 됩니다.
 
 1. 복사한 Google Sheet를 엽니다.
 2. 상단 메뉴에서 `확장 프로그램 > Apps Script`를 누릅니다.
@@ -102,21 +123,29 @@ flowchart LR
 
 7. `배포`를 누릅니다.
 8. 권한 요청이 나오면 승인합니다.
+   - 필요하면 `Advanced`를 클릭합니다.
+   - `Go to [시트 이름] (unsafe)`를 클릭합니다.
+   - `Continue`를 클릭합니다.
 9. 배포가 끝나면 `웹 앱 URL`을 복사해둡니다.
 
-이 URL은 데이터를 저장하고 조회하는 핵심 주소입니다.
+이 URL은 데이터를 저장하고 조회하는 핵심 주소입니다. 아래 Cloudflare Worker의 환경 변수로 사용되니 복사해둡니다.
 
-## 대표 매니저 3단계: Cloudflare Worker 설정하기
+</details>
+
+<details>
+<summary>3. Cloudflare Worker 설정하기</summary>
 
 Cloudflare Worker는 필수 단계입니다. ZEP에는 Apps Script URL이 아니라 Worker URL을 연결합니다.
 
 1. Cloudflare에 로그인합니다.
-2. Workers & Pages에서 새 Worker를 만듭니다.
-3. 이 프로젝트의 `cloudflare-worker/worker.js` 내용을 붙여넣습니다.
+2. `Workers & Pages`에서 새 Worker를 만듭니다.
+3. 이 프로젝트의 `cloudflare-worker/worker.js` 내용을 붙여넣고 배포합니다.
 4. Worker 설정에서 환경변수 `APPS_SCRIPT_URL`을 추가합니다.
-5. 값에는 2단계에서 복사한 Apps Script 웹 앱 URL을 넣습니다.
-6. Worker를 배포합니다.
-7. 배포된 Worker URL을 복사해둡니다.
+   - `Settings` → `Variables and Secrets` → `Add`
+   - 변수 이름: `APPS_SCRIPT_URL`
+   - 값: 2단계에서 복사한 Apps Script 웹 앱 URL
+5. 저장 후 다시 배포합니다.
+6. 배포된 Worker URL을 복사해둡니다.
 
 예시:
 
@@ -124,21 +153,26 @@ Cloudflare Worker는 필수 단계입니다. ZEP에는 Apps Script URL이 아니
 https://zep-tracking.your-name.workers.dev
 ```
 
-이 URL은 같은 트랙 매니저들이 모두 확장 프로그램의 `Worker URL`에 넣을 공용 주소입니다.
+이 URL은 같은 트랙 매니저들이 확장 프로그램의 `Worker URL`에 넣을 공용 주소입니다.
 
-## 대표 매니저 4단계: ZEP 외부 알림 연결하기
+</details>
 
-1. ZEP 관리자 화면을 엽니다.
-2. 외부 알림 설정 화면으로 이동합니다.
-3. 연결 방식이 `Webhook`과 `API 연결`로 나뉘어 있다면 `API 연결`을 선택합니다.
-4. 입실/퇴실 이벤트를 보낼 URL에 Cloudflare Worker URL을 입력합니다.
-5. 저장합니다.
+<details>
+<summary>4. ZEP 외부 알림 연결하기</summary>
 
-같은 트랙에서 매니저마다 ZEP API 연결을 따로 만들면 안 됩니다. ZEP API 연결은 트랙당 1개만 사용하고, 다른 매니저는 대표 매니저가 만든 결과를 함께 조회합니다.
+1. ZEP 외부 알림 설정 화면으로 이동합니다.
+2. 연결 방식이 `Webhook`과 `API 연결`로 나뉘어 있다면 `API 연결`을 선택합니다.
+3. 입실/퇴실 이벤트를 보낼 URL에 Cloudflare Worker URL을 입력합니다.
+4. 저장합니다.
+
+같은 트랙에서 매니저마다 ZEP API 연결을 따로 만들 필요가 없습니다. 한 트랙당 API 연결은 한 개만 사용하고, 다른 매니저는 대표 매니저가 만든 결과를 함께 조회합니다.
 
 ZEP에서 누군가 입실하거나 퇴실하면 Google Sheet의 `Events`, `Presence`, `Mappings`에 기록됩니다.
 
-## 모든 매니저 5단계: Chrome 확장 프로그램 설치하기
+</details>
+
+<details>
+<summary>5. Chrome 확장 프로그램 설치하기</summary>
 
 대표 매니저와 다른 매니저 모두 각자 PC의 Chrome에 확장 프로그램을 설치합니다.
 
@@ -155,7 +189,10 @@ chrome://extensions
 6. Chrome 상단의 확장 프로그램 아이콘을 누릅니다.
 7. `ZEP Tracking`을 고정해두면 사용하기 편합니다.
 
-## 모든 매니저 6단계: 확장 프로그램 설정하기
+</details>
+
+<details>
+<summary>6. 확장 프로그램 설정하기</summary>
 
 대표 매니저는 본인이 만든 URL을 입력하고, 다른 매니저는 대표 매니저에게 공유받은 URL을 입력합니다.
 
@@ -167,13 +204,15 @@ chrome://extensions
 | 항목 | 넣을 값 |
 | --- | --- |
 | Worker URL | 같은 트랙에서 함께 사용하는 Cloudflare Worker URL |
-| Google Sheet URL | 같은 트랙에서 함께 보는 Google Sheet URL |
-| 조회 주기(초) | 보통 `5`를 추천합니다 |
+| Google Sheet URL | 같은 트랙에서 함께 보는 Google Sheet URL. 웹 앱 주소가 아닌 시트 자체 URL을 입력합니다. 단순 바로가기 기능이며, 입력하지 않아도 ZEP 접속 트래킹 기능 작동에는 영향이 없습니다. |
+| 조회 주기(초) | 해당 주기에 맞춰 데이터가 갱신됩니다. 보통 `5`를 추천합니다. |
 
 5. `저장`을 누릅니다.
-6. `Google Sheet URL` 옆의 `열기` 버튼을 눌러 시트가 열리는지 확인합니다.
 
-## 대표 매니저 7단계: 실명 매핑하기
+</details>
+
+<details>
+<summary>7. 실명 매핑하기</summary>
 
 이 확장 프로그램은 실명을 Google Sheet의 `Mappings` 시트에서만 관리합니다.
 
@@ -198,26 +237,11 @@ ZEP에서 사용자가 처음 감지되면 `Mappings`에 자동으로 행이 생
 - `userId`는 수정하지 않는 것이 좋습니다.
 - `nickname`은 ZEP에서 감지된 최신 닉네임입니다.
 - `isStaff` 체크박스를 체크하면 운영진으로 처리되어 확장 프로그램 목록, 인원수, 로그에서 제외됩니다.
-- 새 사용자가 자동 추가되면 `isStaff` 체크박스도 자동으로 만들어집니다.
 
-## 모든 매니저 8단계: 확장 프로그램 사용하기
+</details>
 
-확장 프로그램에는 큰 화면이 2개 있습니다.
-
-### Status (현황)
-
-- `미접속` 버튼을 누르면 미접속자 목록이 보입니다.
-- `접속중` 버튼을 누르면 접속중인 사람 목록이 보입니다.
-- 각 인원 카드에는 접속중/퇴실 상태 뱃지와 마지막 이벤트 시간이 표시됩니다.
-- 검색창에 이름, 닉네임, ID를 입력하면 해당 사람만 찾을 수 있습니다.
-
-### Logs (로그)
-
-- 기본으로 최근 로그가 보입니다.
-- 이름을 검색하면 최근 일주일 기록을 날짜별로 묶어서 볼 수 있습니다.
-- 같은 날짜의 입실/퇴실이 한 묶음으로 표시됩니다.
-
-## 대표 매니저 9단계: 정상 작동 확인하기
+<details>
+<summary>8. 정상 작동 확인하기</summary>
 
 아래 순서대로 확인하면 됩니다.
 
@@ -230,7 +254,10 @@ ZEP에서 사용자가 처음 감지되면 `Mappings`에 자동으로 행이 생
 7. ZEP에서 퇴실합니다.
 8. 확장 프로그램에서 미접속으로 이동하면 정상입니다.
 
-## 자주 생기는 문제
+</details>
+
+<details>
+<summary>9. 자주 생기는 문제</summary>
 
 ### 확장 프로그램에 아무것도 안 보여요
 
@@ -285,6 +312,8 @@ Chrome에서 다시 불러와야 합니다.
 1. `chrome://extensions`로 이동합니다.
 2. `ZEP Tracking` 카드의 새로고침 버튼을 누릅니다.
 3. 사이드패널을 닫았다가 다시 엽니다.
+
+</details>
 
 ## 업데이트 방법
 
